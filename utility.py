@@ -3,6 +3,7 @@ import logging
 import networkx
 import os
 from scipy import misc
+import maxflow
 
 
 def loadunaryfile(filename):
@@ -203,6 +204,11 @@ class Nodegrid:
         value, flows = networkx.maximum_flow(self.g, self.source, self.sink)
         return value, flows
 
+    def mincut(self):
+        logging.info("Calculate mincut.")
+        value, cut = networkx.minimum_cut(self.g, self.source, self.sink)
+        return value, cut
+
     def getcap(self, node):
         return self.g[self.source][node]["capacity"]
 
@@ -222,3 +228,94 @@ class Nodegrid:
         networkx.draw_networkx(self.g, pos=positions,
                                node_size=nodesize, with_labels=False,
                                width=0.5)
+
+
+class Node_c:
+    def __init__(self, nodeid, y, x):
+        self.nodeid = nodeid
+        self.y = y
+        self.x = x
+
+
+class Nodegrid_c:
+    def __init__(self, ysize, xsize):
+        self.g = maxflow.GraphFloat()
+
+        self.nodeids = self.g.add_grid_nodes((ysize, xsize))
+
+        self.ysize = ysize
+        self.xsize = xsize
+
+    def loop(self, edgecallback, nodecallback):
+        """
+        Loops over the grid of nodes. Two callback functions are required:
+
+        :param edgecallback: Called for every edge.
+        :param nodecallback: Called for every node.
+        """
+        logging.info("Iterate through graph.")
+
+        for y in range(self.ysize - 1):
+            for x in range(self.xsize - 1):
+                node_i = self.getNode(y, x)
+
+                # Node
+                nodecallback(node_i)
+
+                # Right edge
+                node_j = self.getNode(y, x + 1)
+                edgecallback(node_i, node_j)
+
+                # Down edge
+                node_j = self.getNode(y + 1, x)
+                edgecallback(node_i, node_j)
+
+        # Last column
+        for y in range(self.ysize - 1):
+            node_i = self.getNode(y, self.xsize - 1)
+
+            # Node
+            nodecallback(node_i)
+
+            # Down edge
+            node_j = self.getNode(y + 1, self.xsize - 1)
+            edgecallback(node_i, node_j)
+
+        # Last row
+        for x in range(self.xsize - 1):
+            node_i = self.getNode(self.ysize - 1, x)
+
+            # Node
+            nodecallback(node_i)
+
+            # Right edge
+            node_j = self.getNode(self.ysize - 1, x + 1)
+            edgecallback(node_i, node_j)
+
+        # Last node
+        nodecallback(self.getNode(self.ysize - 1, self.xsize - 1))
+
+    def add_sink_edge(self, node_i, cap):
+        self.g.add_tedge(node_i.nodeid, 0, cap)
+
+    def add_source_edge(self, node_i, cap):
+        self.g.add_tedge(node_i.nodeid, cap, 0)
+
+    def add_edge(self, node_i, node_j, cap):
+        self.g.add_edge(node_i.nodeid, node_j.nodeid, cap, 0)
+
+    def loopnodes(self, callback):
+        logging.info("Iterate through nodes.")
+        for y in range(self.ysize):
+            for x in range(self.xsize):
+                callback(self.getNode(y, x))
+
+    def maxflow(self):
+        logging.info("Calculate max flow.")
+        return self.g.maxflow()
+
+    def getNode(self, y, x):
+        return Node_c(self.nodeids[y, x], y, x)
+
+    def getsegment(self, node):
+        return self.g.get_segment(node.nodeid)

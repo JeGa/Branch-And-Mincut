@@ -28,17 +28,20 @@ class square:
         return self.maxflowvalue
 
     def split(self):
+        if self.single():
+            raise "Not splitable."
+
         diff_f = abs(self.minf - self.maxf)
         diff_b = abs(self.minb - self.maxb)
 
-        if diff_f > diff_b:
+        if diff_f >= diff_b:
             half = (self.maxf - self.minf + 1) / 2
-            sq1 = square(self.minf, half - 1, self.minb, self.maxb)
-            sq2 = square(half, self.maxf, self.minb, self.maxb)
+            sq1 = square(self.minf, self.minf + half - 1, self.minb, self.maxb)
+            sq2 = square(self.minf + half, self.maxf, self.minb, self.maxb)
         else:
             half = (self.maxb - self.minb + 1) / 2
-            sq1 = square(self.minf, self.maxf, self.minb, half - 1)
-            sq2 = square(self.minf, self.maxf, half, self.maxb)
+            sq1 = square(self.minf, self.maxf, self.minb, self.minb + half - 1)
+            sq2 = square(self.minf, self.maxf, self.minb + half, self.maxb)
 
         return sq1, sq2
 
@@ -46,6 +49,11 @@ class square:
         if self.minf == self.maxf and self.minb == self.maxb:
             return True
         return False
+
+    def strsize(self):
+        f = "(" + str(self.minf) + "," + str(self.maxf) + ")"
+        b = "(" + str(self.minb) + "," + str(self.maxb) + ")"
+        return f + ";" + b
 
 
 class params:
@@ -65,30 +73,58 @@ class bmincut:
 
         self.params = params()
 
-        # TODO: Priority queue
         self.queue = queue.PriorityQueue()
 
     def addparam(self, sq):
-        self.queue.put(sq.getmaxflow, sq)
+        self.queue.put((sq.getmaxflow(), sq))
 
     def getparam(self):
-        return self.queue.get()
+        return self.queue.get()[1]
 
     def segment(self):
+        logging.info("Initialize first square.")
+
         # Initial square with all possible values.
         sq = square(0, 255, 0, 255)
+
         _ = self.potandflow(sq)
 
         self.addparam(sq)
 
-        segments = self.branchandmincut()
+        grid = self.branchandmincut()
+
+        def seg(node_i):
+            nonlocal grid
+            if grid.getsegment(node_i) == 1:
+                # Foreground
+                self.img[node_i.y, node_i.x] = 0
+            else:
+                # Background
+                self.img[node_i.y, node_i.x] = 255
+
+        grid.loopnodes(seg)
+
+        # reachable, non_reachable = cut
+        # for i in reachable:
+        #    self.img[i.y, i.x] = 0
+        # for i in non_reachable:
+        #    self.img[i.y, i.x] = 255
+
+        return self.img
 
     def branchandmincut(self):
+        j = 0
         while True:
+            # for j in range(10):
+            logging.info("Iteration " + str(j))
+            j += 1
+
             # Get parameter with smallest lower bound.
             sq = self.getparam()
 
             if sq.single():
+                # Again ... not sooo nice
+                logging.info("Terminating with:")
                 return self.potandflow(sq)
 
             sq1, sq2 = sq.split()
@@ -98,26 +134,32 @@ class bmincut:
             _ = self.potandflow(sq2)
             self.addparam(sq2)
 
+        return self.potandflow(self.getparam())
+
     def potandflow(self, sq):
         potentials = self.aggreg_potentials(sq)
-        maxflow, segments = self.maxflow(potentials)
+        maxflow, grid = self.mincut(potentials)
         sq.setmaxflow(maxflow)
-        return segments
 
-    def maxflow(self, potentials):
+        logging.info("->" + " " + str(maxflow) + " " + sq.strsize())
+
+        return grid
+
+    def mincut(self, potentials):
         """
         Calculate the maxflow using the given aggregate potentials.
         """
+        # TODO
+        # grid = utility.Nodegrid(self.ysize, self.xsize)
+        grid = utility.Nodegrid_c(self.ysize, self.xsize)
 
-        grid = utility.Nodegrid(self.ysize, self.xsize)
-
-        def edge(self, node_i, node_j):
+        def edge(node_i, node_j):
             nonlocal grid, potentials
 
             cap = 1
             grid.add_edge(node_i, node_j, cap)
 
-        def node(self, node_i):
+        def node(node_i):
             nonlocal grid, potentials
 
             # Foreground = 1
@@ -129,7 +171,10 @@ class bmincut:
             grid.add_source_edge(node_i, cap)
 
         grid.loop(edge, node)
-        return grid.maxflow()
+
+        # TODO
+        # return grid.mincut()
+        return grid.maxflow(), grid
 
     def aggreg_potentials(self, sq):
         """
@@ -184,7 +229,7 @@ def main():
     img = utility.readimg_grayscale(imagename)
 
     seg = bmincut(img)
-    seg.segment()
+    img = seg.segment()
 
     logging.info("Save image.")
     plt.imsave("img_out", img)
