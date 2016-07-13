@@ -270,6 +270,14 @@ class Nodegrid_c:
                 node_j = self.getNode(y + 1, x)
                 edgecallback(node_i, node_j)
 
+                # Right-down edge
+                node_j = self.getNode(y + 1, x + 1)
+                edgecallback(node_i, node_j)
+
+                node_i = self.getNode(y, x + 1)
+                node_j = self.getNode(y + 1, x)
+                edgecallback(node_i, node_j)
+
         # Last column
         for y in range(self.ysize - 1):
             node_i = self.getNode(y, self.xsize - 1)
@@ -302,7 +310,7 @@ class Nodegrid_c:
         self.g.add_tedge(node_i.nodeid, cap, 0)
 
     def add_edge(self, node_i, node_j, cap):
-        self.g.add_edge(node_i.nodeid, node_j.nodeid, cap, 0)
+        self.g.add_edge(node_i.nodeid, node_j.nodeid, cap, cap)
 
     def loopnodes(self, callback):
         logging.info("Iterate through nodes.")

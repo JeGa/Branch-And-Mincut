@@ -1,6 +1,6 @@
 import numpy as np
 import logging
-import os
+import time
 import matplotlib.pyplot as plt
 import queue
 
@@ -31,15 +31,15 @@ class square:
         if self.single():
             raise "Not splitable."
 
-        diff_f = abs(self.minf - self.maxf)
-        diff_b = abs(self.minb - self.maxb)
+        diff_f = self.maxf - self.minf
+        diff_b = self.maxb - self.minb
 
         if diff_f >= diff_b:
-            half = (self.maxf - self.minf + 1) / 2
+            half = int((self.maxf - self.minf + 1) / 2)
             sq1 = square(self.minf, self.minf + half - 1, self.minb, self.maxb)
             sq2 = square(self.minf + half, self.maxf, self.minb, self.maxb)
         else:
-            half = (self.maxb - self.minb + 1) / 2
+            half = int((self.maxb - self.minb + 1) / 2)
             sq1 = square(self.minf, self.maxf, self.minb, self.minb + half - 1)
             sq2 = square(self.minf, self.maxf, self.minb + half, self.maxb)
 
@@ -58,10 +58,24 @@ class square:
 
 class params:
     def __init__(self):
-        self.mu = 1
+        self.mu = 2
         self.v = 0.1
         self.l1 = 0.0001
-        self.l2 = 0.0002
+        self.l2 = 0.0001
+
+
+class PQueue(queue.PriorityQueue):
+    def __init__(self):
+        queue.PriorityQueue.__init__(self)
+        self.counter = 0
+
+    def put(self, item, priority):
+        queue.PriorityQueue.put(self, (priority, self.counter, item))
+        self.counter += 1
+
+    def get(self, *args, **kwargs):
+        _, _, item = queue.PriorityQueue.get(self, *args, **kwargs)
+        return item
 
 
 class bmincut:
@@ -73,36 +87,51 @@ class bmincut:
 
         self.params = params()
 
-        self.queue = queue.PriorityQueue()
+        # self.queue = queue.PriorityQueue()
+        self.queue = PQueue()
 
     def addparam(self, sq):
-        self.queue.put((sq.getmaxflow(), sq))
+        # self.queue.put((sq.getmaxflow(), time.time(), sq))
+        self.queue.put(sq, sq.getmaxflow())
 
     def getparam(self):
-        return self.queue.get()[1]
+        return self.queue.get()  # [2]
 
-    def segment(self):
-        logging.info("Initialize first square.")
+    def showimg(self, grid):
+        plt.imshow(self.segmentimg(grid))
+        plt.draw()
 
-        # Initial square with all possible values.
-        sq = square(0, 255, 0, 255)
-
-        _ = self.potandflow(sq)
-
-        self.addparam(sq)
-
-        grid = self.branchandmincut()
+    def segmentimg(self, grid):
+        img = np.empty((self.ysize, self.xsize))
 
         def seg(node_i):
             nonlocal grid
             if grid.getsegment(node_i) == 1:
                 # Foreground
-                self.img[node_i.y, node_i.x] = 0
+                img[node_i.y, node_i.x] = 255
             else:
                 # Background
-                self.img[node_i.y, node_i.x] = 255
+                img[node_i.y, node_i.x] = 0
 
         grid.loopnodes(seg)
+
+        return img
+
+    def segment(self):
+        logging.info("Initialize first square.")
+
+        start = time.perf_counter()
+
+        # Initial square with all possible values.
+        sq = square(0, 255, 0, 255)
+
+        grid = self.potandflow(sq)
+
+        self.addparam(sq)
+
+        grid = self.branchandmincut()
+
+        img = self.segmentimg(grid)
 
         # reachable, non_reachable = cut
         # for i in reachable:
@@ -110,7 +139,11 @@ class bmincut:
         # for i in non_reachable:
         #    self.img[i.y, i.x] = 255
 
-        return self.img
+        end = time.perf_counter()
+        duration = end - start
+        logging.info("Took " + str(duration) + "seconds.")
+
+        return img
 
     def branchandmincut(self):
         j = 0
@@ -122,15 +155,20 @@ class bmincut:
             # Get parameter with smallest lower bound.
             sq = self.getparam()
 
+            logging.info("->" + " " + str(sq.getmaxflow()) + " " + sq.strsize())
+
             if sq.single():
                 # Again ... not sooo nice
                 logging.info("Terminating with:")
                 return self.potandflow(sq)
 
             sq1, sq2 = sq.split()
+
+            logging.info("First of split. ----")
             _ = self.potandflow(sq1)
             self.addparam(sq1)
 
+            logging.info("Second of split. ---")
             _ = self.potandflow(sq2)
             self.addparam(sq2)
 
@@ -140,8 +178,6 @@ class bmincut:
         potentials = self.aggreg_potentials(sq)
         maxflow, grid = self.mincut(potentials)
         sq.setmaxflow(maxflow)
-
-        logging.info("->" + " " + str(maxflow) + " " + sq.strsize())
 
         return grid
 
@@ -164,11 +200,11 @@ class bmincut:
 
             # Foreground = 1
             cap = potentials[node_i.y, node_i.x, 1]
-            grid.add_sink_edge(node_i, cap)
+            grid.add_source_edge(node_i, cap)
 
             # Background = 0
             cap = potentials[node_i.y, node_i.x, 0]
-            grid.add_source_edge(node_i, cap)
+            grid.add_sink_edge(node_i, cap)
 
         grid.loop(edge, node)
 
@@ -191,31 +227,29 @@ class bmincut:
         return potentials
 
     def foreground(self, sq, y, x):
-        cfmin = sq.minf
-        cfmax = sq.maxf
-
         I = self.img[y, x]
 
-        min = self.mindiff(cfmin, cfmax, I)
+        min = self.mindiff(sq.minf, sq.maxf, I)
+        if min == 0:
+            return self.params.v
         return self.params.v + self.params.l1 * np.power(min, 2)
 
     def background(self, sq, y, x):
-        cbmin = sq.minb
-        cbmax = sq.maxb
-
         I = self.img[y, x]
 
-        min = self.mindiff(cbmin, cbmax, I)
+        min = self.mindiff(sq.minb, sq.maxb, I)
+        if min == 0:
+            return 0
         return self.params.l2 * np.power(min, 2)
 
     def mindiff(self, minbound, maxbound, I):
-        if minbound >= I:
+        if minbound > I:
             min = I - minbound
-        elif maxbound <= I:
+        elif maxbound < I:
             min = I - maxbound
         else:
-            # cfmin < I and cfmax > I
-            min = I
+            # cfmin <= I and cfmax => I
+            min = 0
 
         return min
 
