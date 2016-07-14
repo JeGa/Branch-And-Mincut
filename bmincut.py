@@ -284,22 +284,22 @@ class bmincut:
                 # Right edge
                 node_j = nodeids[y, x + 1]
                 cap = 1
-                grid.add_edge(node_i, node_j, cap, cap)
+                grid.add_edge(node_i, node_j, cap, 0)
 
                 # Down edge
                 node_j = nodeids[y + 1, x]
                 cap = 1
-                grid.add_edge(node_i, node_j, cap, cap)
+                grid.add_edge(node_i, node_j, cap, 0)
 
                 # Right-down edge
                 node_j = nodeids[y + 1, x + 1]
                 cap = 1
-                grid.add_edge(node_i, node_j, cap, cap)
+                grid.add_edge(node_i, node_j, cap, 0)
 
                 node_i = nodeids[y, x + 1]
                 node_j = nodeids[y + 1, x]
                 cap = 1
-                grid.add_edge(node_i, node_j, cap, cap)
+                grid.add_edge(node_i, node_j, cap, 0)
 
         # Last column
         for y in range(self.ysize - 1):
@@ -318,7 +318,7 @@ class bmincut:
             # Down edge
             node_j = nodeids[y + 1, self.xsize - 1]
             cap = 1
-            grid.add_edge(node_i, node_j, cap, cap)
+            grid.add_edge(node_i, node_j, cap, 0)
 
         # Last row
         for x in range(self.xsize - 1):
@@ -337,7 +337,7 @@ class bmincut:
             # Right edge
             node_j = nodeids[self.ysize - 1, x + 1]
             cap = 1
-            grid.add_edge(node_i, node_j, cap, cap)
+            grid.add_edge(node_i, node_j, cap, 0)
 
         # Last node
         node_i = nodeids[self.ysize - 1, self.xsize - 1]
