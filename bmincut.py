@@ -1,9 +1,10 @@
-import numpy as np
 import logging
-import time
-import matplotlib.pyplot as plt
 import queue
+import time
+
+import matplotlib.pyplot as plt
 import maxflow
+import numpy as np
 
 import utility
 
